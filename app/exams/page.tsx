@@ -3,6 +3,7 @@ import { type Exam } from "@/lib/types";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function ExamsPage() {
   const sb = publicSupabase();
@@ -12,6 +13,7 @@ export default async function ExamsPage() {
   return (
     <main className="mt-8 space-y-4">
       <h1 className="text-2xl font-black">Upcoming offline exams</h1>
+      <p className="-mt-2 text-xs text-slate-500">Live data — refresh the page to see the latest.</p>
       {!exams.length && <div className="card">No exams published yet. Check back soon.</div>}
       <div className="grid gap-4 md:grid-cols-2">
         {exams.map(ex => (

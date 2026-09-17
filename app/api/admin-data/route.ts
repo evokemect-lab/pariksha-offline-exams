@@ -147,6 +147,17 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true, message: `Allocated ${done}/${targets.length} seats ✓ (${rooms} rooms × ${per})` });
   }
+function gradeFor(pct: number) {
+  if (pct >= 90) return "A+";
+  if (pct >= 80) return "A";
+  if (pct >= 70) return "B+";
+  if (pct >= 60) return "B";
+  if (pct >= 50) return "C+";
+  if (pct >= 40) return "C";
+  if (pct >= 30) return "D";
+  return "E";
+}
+
   if (action === "bulk-results") {
     const rows = (body.rows || []) as { hall_ticket_no: string; marks_obtained: number; grade?: string | null }[];
     if (!rows.length) return NextResponse.json({ error: "No rows" }, { status: 400 });
@@ -184,6 +195,46 @@ export async function POST(req: Request) {
       }
     }
     return NextResponse.json({ ok: true, message: `Published ${upserts.length} results ✓${missing.length ? `, ${missing.length} ticket(s) not found: ${missing.slice(0, 5).join(", ")}` : ""}` });
+  }
+  if (action === "bulk-subject-results") {
+    // rows: { hall_ticket_no, subject, ce, pe, te, max? } — CSV: HALLTICKET,subject,ce,pe,te,max
+    const rows = (body.rows || []) as { hall_ticket_no: string; subject: string; ce?: number; pe?: number; te?: number; max?: number }[];
+    if (!rows.length) return NextResponse.json({ error: "No rows" }, { status: 400 });
+    const tickets = [...new Set(rows.map(r => r.hall_ticket_no))];
+    const { data: found, error: ferr } = await db.from("registrations").select("id,hall_ticket_no,exam_id").in("hall_ticket_no", tickets);
+    if (ferr) return NextResponse.json({ error: ferr.message }, { status: 400 });
+    const byTicket = new Map((found || []).map((r: any) => [r.hall_ticket_no, r]));
+    const missing = rows.filter(r => !byTicket.has(r.hall_ticket_no)).map(r => r.hall_ticket_no);
+    const subs = rows.filter(r => byTicket.has(r.hall_ticket_no) && r.subject).map(r => {
+      const ce = Number(r.ce) || 0, pe = Number(r.pe) || 0, te = Number(r.te) || 0;
+      const max = Number(r.max) > 0 ? Number(r.max) : 100;
+      const total = ce + pe + te;
+      return {
+        registration_id: byTicket.get(r.hall_ticket_no).id,
+        subject: r.subject.trim(),
+        ce, pe, te, max_marks: max, total,
+        grade: gradeFor(max > 0 ? (total / max) * 100 : 0)
+      };
+    });
+    if (subs.length) {
+      const { error } = await db.from("result_subjects").upsert(subs, { onConflict: "registration_id,subject" });
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    // Recompute grand totals per registration -> results row
+    const regIds = [...new Set(subs.map(s => s.registration_id))];
+    let published = 0;
+    for (const rid of regIds) {
+      const { data: all } = await db.from("result_subjects").select("total,max_marks").eq("registration_id", rid);
+      const grand = (all || []).reduce((s: number, r: any) => s + Number(r.total || 0), 0);
+      const maxTot = (all || []).reduce((s: number, r: any) => s + Number(r.max_marks || 0), 0);
+      const pct = maxTot > 0 ? (grand / maxTot) * 100 : 0;
+      const { error } = await db.from("results").upsert({
+        registration_id: rid, marks_obtained: grand,
+        grade: gradeFor(pct), published: true
+      }, { onConflict: "registration_id" });
+      if (!error) published++;
+    }
+    return NextResponse.json({ ok: true, message: `Saved ${subs.length} subject rows, published ${published} results ✓${missing.length ? `, ${[...new Set(missing)].length} ticket(s) not found` : ""}` });
   }
   if (action === "remove-question-url") {
     const { error } = await db.from("exams").update({ question_paper_url: null }).eq("id", body.id);

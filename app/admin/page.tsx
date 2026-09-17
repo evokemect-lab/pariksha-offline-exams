@@ -75,6 +75,7 @@ export default function Admin() {
   // filters / results csv
   const [examFilter, setExamFilter] = useState("");
   const [csv, setCsv] = useState("");
+  const [subCsv, setSubCsv] = useState("");
   const [qpExam, setQpExam] = useState("");
   const [qpFile, setQpFile] = useState<File | null>(null);
 
@@ -157,6 +158,16 @@ export default function Admin() {
     if (!rows.length) { setMsg("No valid rows. Format: HALLTICKET,marks,grade"); return; }
     await act("bulk-results", { rows, exam_id: examFilter });
     setCsv("");
+  }
+
+  async function uploadSubjectResults() {
+    const rows = subCsv.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const [hall_ticket_no, subject, ce, pe, te, max] = l.split(",").map(s => s.trim());
+      return { hall_ticket_no, subject, ce: Number(ce) || 0, pe: Number(pe) || 0, te: Number(te) || 0, max: Number(max) || 100 };
+    }).filter(r => r.hall_ticket_no && r.subject);
+    if (!rows.length) { setMsg("No valid rows. Format: HALLTICKET,subject,ce,pe,te,max"); return; }
+    await act("bulk-subject-results", { rows });
+    setSubCsv("");
   }
 
   async function uploadPaper() {
@@ -416,7 +427,15 @@ export default function Admin() {
           {tab === "results" && (
             <div className="space-y-4">
               <div className="card space-y-2">
-                <h2 className="font-bold">Bulk upload results (CSV)</h2>
+                <h2 className="font-bold">Subject-wise upload (marksheet: CE/PE/TE)</h2>
+                <textarea className="input font-mono text-xs" rows={6}
+                  placeholder={"HALLTICKET,subject,ce,pe,te,max\nSY201-26-0001,ENGLISH,18,0,72,100\n…"}
+                  value={subCsv} onChange={e=>setSubCsv(e.target.value)} />
+                <p className="text-xs text-slate-500">One per line: <b>hall_ticket_no, subject, ce, pe, te, max</b> (max default 100). Totals, grades + grand total auto-computed and published.</p>
+                <button onClick={uploadSubjectResults} className="btn" disabled={busy || !subCsv.trim()}>Upload subjects + Publish</button>
+              </div>
+              <div className="card space-y-2">
+                <h2 className="font-bold">Bulk upload results (single total)</h2>
                 <select className="input max-w-xs" value={examFilter} onChange={e=>setExamFilter(e.target.value)}>
                   {(data.exams || []).map((e: any) => <option key={e.id} value={e.id}>{e.code} — {e.title}</option>)}
                 </select>

@@ -13,10 +13,14 @@ export default function ExamDetail() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    sb.from("exams").select("*").eq("id", params.id).single().then(({ data }) => setExam(data as Exam));
+    sb.from("exams").select("*").eq("id", params.id).single().then(({ data, error }) => {
+      if (error || !data) setNotFound(true);
+      else setExam(data as Exam);
+    });
     sb.from("exam_centers").select("*").eq("is_active", true).then(({ data }) => {
       setCenters((data || []) as ExamCenter[]);
       if (data?.[0]) setCenterId(data[0].id);
@@ -43,6 +47,13 @@ export default function ExamDetail() {
     setLoading(false);
   }
 
+  if (notFound) return (
+    <main className="mt-8 card mx-auto max-w-md text-center">
+      <h1 className="text-xl font-black">Exam no longer available</h1>
+      <p className="mt-2 text-sm text-slate-500">This exam was removed or is no longer published. Please pick another from the list.</p>
+      <button onClick={() => router.push("/exams")} className="btn mt-4">Back to exams</button>
+    </main>
+  );
   if (!exam) return <main className="mt-8">Loading…</main>;
 
   return (

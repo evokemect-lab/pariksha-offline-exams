@@ -4,7 +4,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: "#c9a227",
+        brand: "#123c8c",
+        accent: "#e8721c",
         ink: "#101828",
         card: "#ffffff"
       }

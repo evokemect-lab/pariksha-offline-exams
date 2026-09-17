@@ -39,13 +39,29 @@ export default function Dashboard() {
   async function saveProfile() {
     if (!profile) return;
     setSaving(true); setMsg("");
-    const { error } = await sb().from("profiles").update({
-      full_name: profile.full_name, phone: profile.phone,
-      father_name: profile.father_name, mother_name: profile.mother_name,
-      dob: profile.dob || null, gender: profile.gender, category: profile.category,
-      address: profile.address, id_proof_no: profile.id_proof_no
-    }).eq("id", uid);
-    setMsg(error ? error.message : "Profile saved ✓");
+    try {
+      const s = sb();
+      const { error } = await s.from("profiles").update({
+        full_name: profile.full_name, phone: profile.phone,
+        father_name: profile.father_name, mother_name: profile.mother_name,
+        dob: profile.dob || null, gender: profile.gender, category: profile.category,
+        address: profile.address, id_proof_no: profile.id_proof_no
+      }).eq("id", uid);
+      if (error) throw error;
+      setMsg("Profile saved ✓");
+    } catch (err: any) {
+      // RLS-safe fallback via server
+      try {
+        const s = sb();
+        const { data: { session } } = await s.auth.getSession();
+        const pr = await fetch("/api/ensure-profile", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ access_token: session?.access_token, profile })
+        });
+        const pj = await pr.json();
+        setMsg(pr.ok ? "Profile saved ✓" : (pj.error || "Save failed"));
+      } catch (e: any) { setMsg(e?.message || "Save failed"); }
+    }
     setSaving(false);
   }
 

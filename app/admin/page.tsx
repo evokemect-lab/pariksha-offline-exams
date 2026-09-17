@@ -35,6 +35,29 @@ export default function Admin() {
 
   const envMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  function sbClient() {
+    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  }
+
+  // Always returns a fresh (auto-refreshed) access token, or null if logged out.
+  async function freshToken(): Promise<string | null> {
+    try {
+      const s = sbClient();
+      let { data: { session } } = await s.auth.getSession();
+      if (session && session.expires_at && session.expires_at * 1000 < Date.now() + 60000) {
+        const { data } = await s.auth.refreshSession();
+        session = data.session;
+      }
+      if (session) { setToken(session.access_token); return session.access_token; }
+    } catch { /* fall through */ }
+    return null;
+  }
+
+  function expired() {
+    setToken(""); setData(null);
+    setMsg("Session expired — please login again.");
+  }
+
   async function login() {
     if (envMissing) { setMsg("App not configured on this deployment (missing Supabase keys)."); return; }
     setMsg(""); setBusy(true);
@@ -49,11 +72,16 @@ export default function Admin() {
     finally { setBusy(false); }
   }
 
-  async function load(t = token) {
+  async function load(t?: string) {
     try {
-      const res = await fetch("/api/admin-data", { headers: { "x-access-token": t } });
+      const tok = t ?? await freshToken();
+      if (!tok) { expired(); return; }
+      const res = await fetch("/api/admin-data", { headers: { "x-access-token": tok } });
       const j = await res.json();
-      if (!res.ok) { setMsg(j.error); return; }
+      if (!res.ok) {
+        if (j.error === "Admin only") { expired(); return; }
+        setMsg(j.error); return;
+      }
       setData(j); setMsg("");
       if (!examFilter && j.exams?.[0]) setExamFilter(j.exams[0].id);
       if (!qpExam && j.exams?.[0]) setQpExam(j.exams[0].id);
@@ -63,13 +91,15 @@ export default function Admin() {
   async function act(action: string, payload: any = {}) {
     setBusy(true);
     try {
+      const tok = await freshToken();
+      if (!tok) { expired(); return; }
       const res = await fetch("/api/admin-data", {
-        method: "POST", headers: { "Content-Type": "application/json", "x-access-token": token },
+        method: "POST", headers: { "Content-Type": "application/json", "x-access-token": tok },
         body: JSON.stringify({ action, ...payload })
       });
       const j = await res.json();
-      setMsg(j.error || j.message || "Done ✓");
-      await load();
+      if (j.error === "Admin only") { expired(); }
+      else { setMsg(j.error || j.message || "Done ✓"); await load(tok); }
     } catch (e: any) { setMsg(e?.message || "Failed"); }
     setBusy(false);
   }
@@ -88,14 +118,17 @@ export default function Admin() {
     if (!qpFile || !qpExam) { setMsg("Choose exam + PDF file"); return; }
     setBusy(true);
     try {
+      const tok = await freshToken();
+      if (!tok) { expired(); return; }
       const fd = new FormData();
       fd.append("exam_id", qpExam);
       fd.append("file", qpFile);
-      const res = await fetch("/api/upload-question", { method: "POST", headers: { "x-access-token": token }, body: fd });
+      const res = await fetch("/api/upload-question", { method: "POST", headers: { "x-access-token": tok }, body: fd });
       const j = await res.json();
+      if (j.error === "Admin only") { expired(); return; }
       setMsg(j.error || "Question paper uploaded ✓");
       setQpFile(null);
-      await load();
+      await load(tok);
     } catch (e: any) { setMsg(e?.message || "Upload failed"); }
     setBusy(false);
   }
@@ -140,7 +173,20 @@ export default function Admin() {
 
   return (
     <main className="mt-8 space-y-4">
-      <h1 className="text-2xl font-black">Admin panel</h1>
+      <div className="no-print flex items-center justify-between">
+        <h1 className="text-2xl font-black">Admin panel</h1>
+        {token && (
+          <button
+            onClick={async () => {
+              try { await sbClient().auth.signOut(); } catch { /* ignore */ }
+              setToken(""); setData(null); setMsg("Logged out.");
+            }}
+            className="btn-ghost text-sm"
+          >
+            Logout
+          </button>
+        )}
+      </div>
       {!token && (
         <div className="card mx-auto max-w-md space-y-2">
           <div><label className="label">Admin email</label><input className="input" value={email} onChange={e=>setEmail(e.target.value)} /></div>

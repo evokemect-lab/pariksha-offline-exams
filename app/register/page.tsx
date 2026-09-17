@@ -58,7 +58,18 @@ export default function Register() {
         address: address || null, id_proof_no: idProof || null,
         ...(photoUrl ? { photo_url: photoUrl } : {})
       });
-      if (perr) { setErr("Account created but saving details failed: " + perr.message); return; }
+      if (perr) {
+        // RLS-safe fallback: server creates the profile with service_role
+        const pr = await fetch("/api/ensure-profile", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ access_token: session.access_token, profile: {
+            full_name: fullName, phone, father_name: father, mother_name: mother,
+            dob, gender, category, address, id_proof_no: idProof, photo_url: photoUrl
+          }})
+        });
+        const pj = await pr.json();
+        if (!pr.ok) { setErr("Account created but saving details failed: " + (pj.error || "unknown") + " — login and complete your profile in dashboard."); return; }
+      }
       router.push("/dashboard");
     } catch (err: any) {
       setErr(err?.message || "Registration failed");

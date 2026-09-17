@@ -12,6 +12,7 @@ export default function ExamDetail() {
   const [centerId, setCenterId] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -20,6 +21,9 @@ export default function ExamDetail() {
       setCenters((data || []) as ExamCenter[]);
       if (data?.[0]) setCenterId(data[0].id);
     });
+    sb.auth.getSession().then(({ data: { session } }) => setLoggedIn(!!session));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setLoggedIn(!!session));
+    return () => { sub.subscription.unsubscribe(); };
   }, [params.id]);
 
   async function register() {
@@ -56,6 +60,18 @@ export default function ExamDetail() {
         </div>
       </div>
 
+      {loggedIn === null ? (
+        <div className="card">Checking login…</div>
+      ) : !loggedIn ? (
+        <div className="card space-y-3 text-center">
+          <h2 className="font-bold">Login required</h2>
+          <p className="text-sm text-slate-500">Only logged-in students can register for exams. Create your account with candidate details first, then come back here.</p>
+          <div className="flex justify-center gap-2">
+            <button onClick={() => router.push("/login")} className="btn-ghost">Login</button>
+            <button onClick={() => router.push("/register")} className="btn">Create account</button>
+          </div>
+        </div>
+      ) : (
       <div className="card space-y-3">
         <h2 className="font-bold">Register for this exam</h2>
         <div>
@@ -67,6 +83,7 @@ export default function ExamDetail() {
         <button className="btn" disabled={loading || !centerId} onClick={register}>{loading ? "Registering…" : "Register"}</button>
         {msg && <div className="text-sm">{msg}</div>}
       </div>
+      )}
     </main>
   );
 }

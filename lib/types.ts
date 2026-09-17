@@ -46,6 +46,8 @@ export interface ExamCenter {
   contact_phone: string | null;
   is_active: boolean;
   center_code?: string | null;
+  num_classes?: number | null;
+  seats_per_class?: number | null;
 }
 
 export interface Registration {

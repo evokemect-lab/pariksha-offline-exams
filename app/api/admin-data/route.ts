@@ -19,14 +19,15 @@ export async function GET(req: Request) {
   const admin = await requireAdmin(req);
   if (!admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
   const db = svc();
-  const [exams, centers, regs, notices, results] = await Promise.all([
+  const [exams, centers, regs, notices, results, uploads] = await Promise.all([
     db.from("exams").select("*").order("exam_date"),
     db.from("exam_centers").select("*").order("name"),
-    db.from("registrations").select("*, exams(code,title), exam_centers(name), profiles!registrations_student_id_fkey(full_name,phone)").order("created_at", { ascending: false }).limit(300),
+    db.from("registrations").select("*, exams(code,title), exam_centers(name), profiles!registrations_student_id_fkey(full_name,phone)").order("created_at", { ascending: false }).limit(500),
     db.from("notices").select("*").order("published_at", { ascending: false }).limit(20),
-    db.from("results").select("*, registrations!inner(hall_ticket_no,exam_id)").order("created_at", { ascending: false }).limit(500)
+    db.from("results").select("*, registrations!inner(hall_ticket_no,exam_id)").order("created_at", { ascending: false }).limit(500),
+    db.from("result_uploads").select("*, exams(code,title)").order("created_at", { ascending: false }).limit(30)
   ]);
-  return NextResponse.json({ exams: exams.data, centers: centers.data, registrations: regs.data, notices: notices.data, results: results.data });
+  return NextResponse.json({ exams: exams.data, centers: centers.data, registrations: regs.data, notices: notices.data, results: results.data, uploads: uploads.data });
 }
 
 export async function POST(req: Request) {
@@ -77,6 +78,61 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, message: "Center updated ✓" });
   }
+  if (action === "update-center") {
+    const { id, name, center_code, address, city, capacity, contact_phone, num_classes, seats_per_class } = body;
+    const { error } = await db.from("exam_centers").update({
+      ...(name !== undefined ? { name } : {}),
+      ...(center_code !== undefined ? { center_code: center_code || null } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(city !== undefined ? { city } : {}),
+      ...(capacity !== undefined ? { capacity: Number(capacity) } : {}),
+      ...(contact_phone !== undefined ? { contact_phone: contact_phone || null } : {}),
+      ...(num_classes !== undefined ? { num_classes: Number(num_classes) } : {}),
+      ...(seats_per_class !== undefined ? { seats_per_class: Number(seats_per_class) } : {})
+    }).eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, message: "Center saved ✓" });
+  }
+  if (action === "auto-allocate") {
+    const { exam_id, center_id, mode } = body;
+    if (!exam_id || !center_id) return NextResponse.json({ error: "exam + center required" }, { status: 400 });
+    const { data: center } = await db.from("exam_centers").select("*").eq("id", center_id).single();
+    if (!center) return NextResponse.json({ error: "Center not found" }, { status: 400 });
+    const rooms = Math.max(1, center.num_classes || 1);
+    const per = Math.max(1, center.seats_per_class || 30);
+    const capacity = rooms * per;
+    const { data: all } = await db.from("registrations")
+      .select("id,room_no,seat_no,status,hall_ticket_no")
+      .eq("exam_id", exam_id).eq("center_id", center_id)
+      .in("status", ["confirmed", "paid"]).order("hall_ticket_no");
+    if (!all?.length) return NextResponse.json({ error: "No issued (confirmed) students at this center" }, { status: 400 });
+    const targets = mode === "reallocate" ? all : all.filter(r => !r.room_no || !r.seat_no);
+    if (!targets.length) return NextResponse.json({ ok: true, message: "Everyone already has a seat ✓" });
+    if (targets.length > capacity) return NextResponse.json({
+      error: `Not enough seats: ${targets.length} students need seats but ${rooms} classes × ${per} = ${capacity}. Increase classes or seats-per-class.`
+    }, { status: 400 });
+    // Occupied slots (so "fill" continues after existing assignments)
+    const used = new Set<string>();
+    if (mode !== "reallocate") {
+      for (const r of all) {
+        const rm = /^Room (\d+)$/.exec(r.room_no || "");
+        if (rm && r.seat_no) used.add(`${Number(rm[1])}-${Number(r.seat_no)}`);
+      }
+    }
+    const free: string[] = [];
+    for (let r = 1; r <= rooms && free.length < targets.length + used.size; r++)
+      for (let s = 1; s <= per; s++) {
+        const k = `${r}-${s}`;
+        if (!used.has(k)) free.push(k);
+      }
+    let done = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const [r, s] = free[i].split("-");
+      const { error } = await db.from("registrations").update({ room_no: `Room ${r}`, seat_no: s }).eq("id", targets[i].id);
+      if (!error) done++;
+    }
+    return NextResponse.json({ ok: true, message: `Allocated ${done}/${targets.length} seats ✓ (${rooms} rooms × ${per})` });
+  }
   if (action === "bulk-results") {
     const rows = (body.rows || []) as { hall_ticket_no: string; marks_obtained: number; grade?: string | null }[];
     if (!rows.length) return NextResponse.json({ error: "No rows" }, { status: 400 });
@@ -95,12 +151,51 @@ export async function POST(req: Request) {
       const { error } = await db.from("results").upsert(upserts, { onConflict: "registration_id" });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     }
+    // Record the upload batch (dedicated upload history table)
+    if (body.exam_id) {
+      await db.from("result_uploads").insert({
+        exam_id: body.exam_id, uploaded_by: admin.id,
+        total_rows: rows.length, success_rows: upserts.length
+      });
+      // Auto-rank individuals for this exam (dense rank by marks, per exam attended)
+      const { data: all } = await db.from("results")
+        .select("id,marks_obtained,registrations!inner(exam_id)")
+        .eq("registrations.exam_id", body.exam_id)
+        .order("marks_obtained", { ascending: false });
+      let rank = 0, last: number | null = null;
+      for (const row of (all || []) as any[]) {
+        const m = Number(row.marks_obtained);
+        if (last === null || m !== last) { rank++; last = m; }
+        await db.from("results").update({ rank }).eq("id", row.id);
+      }
+    }
     return NextResponse.json({ ok: true, message: `Published ${upserts.length} results ✓${missing.length ? `, ${missing.length} ticket(s) not found: ${missing.slice(0, 5).join(", ")}` : ""}` });
   }
   if (action === "remove-question-url") {
     const { error } = await db.from("exams").update({ question_paper_url: null }).eq("id", body.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, message: "Question paper removed" });
+  }
+  if (action === "delete-exam") {
+    const { error } = await db.from("exams").delete().eq("id", body.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, message: "Exam deleted ✓" });
+  }
+  if (action === "delete-registration") {
+    const { error } = await db.from("registrations").delete().eq("id", body.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, message: "Registration removed ✓" });
+  }
+  if (action === "delete-center") {
+    const { error } = await db.from("exam_centers").delete().eq("id", body.id);
+    if (error) return NextResponse.json({ error: "Cannot delete: center still has registrations. Move or remove them first." }, { status: 400 });
+    return NextResponse.json({ ok: true, message: "Center deleted ✓" });
+  }
+  if (action === "delete-student") {
+    const { error } = await db.from("profiles").delete().eq("id", body.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    try { await db.auth.admin.deleteUser(body.id); } catch { /* auth cleanup best-effort */ }
+    return NextResponse.json({ ok: true, message: "Student deleted ✓" });
   }
   if (action === "assign-seat") {
     const { error } = await db.from("registrations").update({ room_no: body.room_no, seat_no: body.seat_no }).eq("id", body.id);

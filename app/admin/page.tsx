@@ -39,6 +39,39 @@ export default function Admin() {
   const [cRooms, setCRooms] = useState("4");
   const [cPer, setCPer] = useState("30");
   const [seatCenter, setSeatCenter] = useState("");
+  // center edit form (inline)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [eName, setEName] = useState("");
+  const [eCode, setECode] = useState("");
+  const [eAddr, setEAddr] = useState("");
+  const [eCity, setECity] = useState("");
+  const [eCap, setECap] = useState("");
+  const [ePhone, setEPhone] = useState("");
+  const [eRooms, setERooms] = useState("");
+  const [ePer, setEPer] = useState("");
+
+  function startEdit(c: any) {
+    setEditingId(c.id);
+    setEName(c.name || ""); setECode(c.center_code || "");
+    setEAddr(c.address || ""); setECity(c.city || "");
+    setECap(String(c.capacity ?? "")); setEPhone(c.contact_phone || "");
+    setERooms(String(c.num_classes ?? 1)); setEPer(String(c.seats_per_class ?? 30));
+    setMsg("");
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    if (!eName.trim() || !eCity.trim()) { setMsg("Center name + city are required."); return; }
+    const rooms = Math.max(1, parseInt(eRooms) || 1);
+    const per = Math.max(1, parseInt(ePer) || 30);
+    await act("update-center", {
+      id: editingId, name: eName.trim(), center_code: eCode.trim(),
+      address: eAddr.trim(), city: eCity.trim(),
+      capacity: parseInt(eCap) > 0 ? parseInt(eCap) : rooms * per,
+      contact_phone: ePhone.trim(), num_classes: rooms, seats_per_class: per
+    });
+    setEditingId(null);
+  }
   // filters / results csv
   const [examFilter, setExamFilter] = useState("");
   const [csv, setCsv] = useState("");
@@ -349,6 +382,7 @@ export default function Admin() {
                     <span className="text-slate-500">🏫 {c.num_classes || 1} classes × {c.seats_per_class || 30} = {(c.num_classes || 1) * (c.seats_per_class || 30)} seats</span>
                     <span className={`rounded px-2 py-0.5 text-xs font-bold ${c.is_active ? "bg-green-100 text-green-800" : "bg-slate-200 text-slate-600"}`}>{c.is_active ? "Active" : "Inactive"}</span>
                     <button onClick={() => act("toggle-center", { id: c.id, is_active: !c.is_active })} className="btn-ghost text-xs">{c.is_active ? "Deactivate" : "Activate"}</button>
+                    <button onClick={() => (editingId === c.id ? setEditingId(null) : startEdit(c))} className="btn-ghost text-xs">{editingId === c.id ? "Close" : "Edit"}</button>
                     <button onClick={() => {
                       const n = prompt("How many classrooms?", String(c.num_classes || 1));
                       const s = prompt("Students per classroom?", String(c.seats_per_class || 30));
@@ -357,6 +391,22 @@ export default function Admin() {
                     <button onClick={() => {
                       if (confirm(`Delete center ${c.name}? Only possible when no registrations use it.`)) act("delete-center", { id: c.id });
                     }} className="btn-ghost text-xs !border-red-300 !text-red-600">Delete</button>
+                    {editingId === c.id && (
+                      <div className="grid w-full gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-3">
+                        <div><label className="label">Name</label><input className="input" value={eName} onChange={e=>setEName(e.target.value)} /></div>
+                        <div><label className="label">Code</label><input className="input" value={eCode} onChange={e=>setECode(e.target.value)} /></div>
+                        <div><label className="label">City</label><input className="input" value={eCity} onChange={e=>setECity(e.target.value)} /></div>
+                        <div className="md:col-span-2"><label className="label">Address</label><input className="input" value={eAddr} onChange={e=>setEAddr(e.target.value)} /></div>
+                        <div><label className="label">Phone</label><input className="input" value={ePhone} onChange={e=>setEPhone(e.target.value)} /></div>
+                        <div><label className="label">Capacity</label><input className="input" value={eCap} onChange={e=>setECap(e.target.value)} /></div>
+                        <div><label className="label">Classes</label><input className="input" value={eRooms} onChange={e=>setERooms(e.target.value)} /></div>
+                        <div><label className="label">Seats / class</label><input className="input" value={ePer} onChange={e=>setEPer(e.target.value)} /></div>
+                        <div className="flex items-end gap-2">
+                          <button onClick={saveEdit} className="btn text-sm" disabled={busy}>Save</button>
+                          <button onClick={() => setEditingId(null)} className="btn-ghost text-sm">Cancel</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

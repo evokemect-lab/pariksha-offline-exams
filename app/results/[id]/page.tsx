@@ -21,13 +21,13 @@ export default function ResultView() {
   return (
     <main className="mt-8 card mx-auto max-w-md text-center">
       <h1 className="text-xl font-black">Result</h1>
-      {msg && <p className="mt-2 text-slate-400">{msg}</p>}
+      {msg && <p className="mt-2 text-slate-500">{msg}</p>}
       {row && (
         <div className="mt-3 space-y-1">
-          <div className="text-sm text-slate-400">{row.registrations?.exams?.title}</div>
+          <div className="text-sm text-slate-500">{row.registrations?.exams?.title}</div>
           <div className="text-4xl font-black text-brand">{row.marks_obtained}/{row.registrations?.exams?.total_marks}</div>
           <div>Grade: <b>{row.grade || "—"}</b> Rank: <b>{row.rank || "—"}</b></div>
-          <div className="text-sm text-slate-400">{row.remarks}</div>
+          <div className="text-sm text-slate-500">{row.remarks}</div>
         </div>
       )}
     </main>

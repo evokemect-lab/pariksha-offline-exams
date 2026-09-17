@@ -8,6 +8,8 @@ export default function Admin() {
   const [token, setToken] = useState("");
   const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const envMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // exam form
   const [code, setCode] = useState("");
@@ -16,19 +18,31 @@ export default function Admin() {
   const [fee, setFee] = useState("199");
 
   async function login() {
-    const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) { setMsg(error.message); return; }
-    setToken(data.session?.access_token || "");
-    setMsg("Logged in — loading data…");
-    load(data.session?.access_token || "");
+    if (envMissing) { setMsg("App not configured: NEXT_PUBLIC_SUPABASE_URL / ANON_KEY missing in this deployment. Add them in Vercel → Settings → Environment Variables (Production) and Redeploy."); return; }
+    setMsg(""); setBusy(true);
+    try {
+      const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) { setMsg(error.message); return; }
+      setToken(data.session?.access_token || "");
+      setMsg("Logged in — loading data…");
+      await load(data.session?.access_token || "");
+    } catch (e: any) {
+      setMsg(e?.message || "Login failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function load(t = token) {
-    const res = await fetch("/api/admin-data", { headers: { "x-access-token": t } });
-    const j = await res.json();
-    if (!res.ok) { setMsg(j.error); return; }
-    setData(j); setMsg("");
+    try {
+      const res = await fetch("/api/admin-data", { headers: { "x-access-token": t } });
+      const j = await res.json();
+      if (!res.ok) { setMsg(j.error); return; }
+      setData(j); setMsg("");
+    } catch (e: any) {
+      setMsg(e?.message || "Failed to load admin data");
+    }
   }
 
   async function createExam() {
@@ -57,8 +71,8 @@ export default function Admin() {
         <div className="card mx-auto max-w-md space-y-2">
           <div><label className="label">Admin email</label><input className="input" value={email} onChange={e=>setEmail(e.target.value)} /></div>
           <div><label className="label">Password</label><input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} /></div>
-          <button onClick={login} className="btn w-full">Login as admin</button>
-          <p className="text-xs text-slate-400">Must be in ADMIN_EMAILS + have role=admin in profiles (set via Supabase dashboard).</p>
+          <button onClick={login} className="btn w-full" disabled={busy}>{busy ? "Logging in…" : "Login as admin"}</button>
+          <p className="text-xs text-slate-500">Must be in ADMIN_EMAILS + have role=admin in profiles (set via Supabase dashboard).</p>
         </div>
       )}
       {msg && <div className="text-sm">{msg}</div>}
@@ -80,10 +94,10 @@ export default function Admin() {
             <h2 className="font-bold">Registrations ({data.registrations?.length || 0})</h2>
             <div className="mt-2 space-y-2">
               {(data.registrations || []).slice(0, 50).map((r: any) => (
-                <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 p-2 text-sm">
+                <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 p-2 text-sm">
                   <span className="font-mono">{r.hall_ticket_no}</span>
                   <span>{r.profiles?.full_name}</span>
-                  <span className="text-slate-400">{r.exams?.code} • {r.payment_status}/{r.status}</span>
+                  <span className="text-slate-500">{r.exams?.code} • {r.payment_status}/{r.status}</span>
                   <button onClick={() => act("confirm-payment", { id: r.id })} className="btn-ghost text-xs">Confirm pay</button>
                   <button onClick={() => {
                     const room = prompt("Room no?", r.room_no || "A1");
@@ -104,7 +118,7 @@ export default function Admin() {
             {(data.exams || []).map((e: any) => (
               <div key={e.id} className="flex items-center gap-2 py-1 text-sm">
                 <span className="font-mono">{e.code}</span><span>{e.title}</span>
-                <span className="text-slate-400">{e.status}</span>
+                <span className="text-slate-500">{e.status}</span>
                 <button onClick={() => act("set-exam-status", { id: e.id, status: "published" })} className="btn-ghost text-xs">Publish</button>
                 <button onClick={() => act("set-exam-status", { id: e.id, status: "closed" })} className="btn-ghost text-xs">Close</button>
               </div>

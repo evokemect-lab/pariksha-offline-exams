@@ -30,7 +30,7 @@ export default function Login() {
         {err && <div className="text-sm text-red-400">{err}</div>}
         <button className="btn w-full" disabled={loading}>{loading ? "Logging in…" : "Login"}</button>
       </form>
-      <p className="mt-3 text-sm text-slate-400">No account? <Link href="/register" className="text-brand">Register</Link></p>
+      <p className="mt-3 text-sm text-slate-500">No account? <Link href="/register" className="text-brand">Register</Link></p>
     </main>
   );
 }

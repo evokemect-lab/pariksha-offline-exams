@@ -16,15 +16,28 @@ export default function Register() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(""); setLoading(true);
-    const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    const { data, error } = await sb.auth.signUp({ email, password });
-    if (error) { setLoading(false); setErr(error.message); return; }
-    const uid = data.user?.id;
-    if (uid) {
-      await sb.from("profiles").insert({ id: uid, full_name: fullName, phone, role: "student" });
+    try {
+      const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+      const { data, error } = await sb.auth.signUp({
+        email, password,
+        options: { data: { full_name: fullName, phone } }
+      });
+      if (error) { setErr(error.message); return; }
+      // If email confirmation is ON, there is no session yet — ask user to verify, then login.
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        setErr("Account created! Check your email to confirm, then login.");
+        return;
+      }
+      const uid = data.user?.id || session.user.id;
+      const { error: perr } = await sb.from("profiles").upsert({ id: uid, full_name: fullName, phone, role: "student" });
+      if (perr) setErr("Account created but profile save failed: " + perr.message + " — you can still login.");
+      else router.push("/dashboard");
+    } catch (err: any) {
+      setErr(err?.message || "Registration failed");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    router.push("/dashboard");
   }
 
   return (
@@ -38,7 +51,7 @@ export default function Register() {
         {err && <div className="text-sm text-red-400">{err}</div>}
         <button className="btn w-full" disabled={loading}>{loading ? "Creating…" : "Register"}</button>
       </form>
-      <p className="mt-3 text-sm text-slate-400">Have an account? <Link href="/login" className="text-brand">Login</Link></p>
+      <p className="mt-3 text-sm text-slate-500">Have an account? <Link href="/login" className="text-brand">Login</Link></p>
     </main>
   );
 }

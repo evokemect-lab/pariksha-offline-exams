@@ -15,6 +15,18 @@ export async function POST(req: Request) {
     if (uerr || !user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
     const db = svc();
+
+    // Self-heal: auth user may exist without a profiles row (FK target).
+    const { data: existing } = await db.from("profiles").select("id").eq("id", user.id).single();
+    if (!existing) {
+      await db.from("profiles").insert({
+        id: user.id,
+        full_name: (user.user_metadata as any)?.full_name || user.email?.split("@")[0] || "Student",
+        phone: (user.user_metadata as any)?.phone || null,
+        role: "student"
+      });
+    }
+
     const { data: exam } = await db.from("exams").select("*").eq("id", exam_id).single();
     if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
     if (exam.status !== "published") return NextResponse.json({ error: "Registrations closed for this exam" }, { status: 400 });

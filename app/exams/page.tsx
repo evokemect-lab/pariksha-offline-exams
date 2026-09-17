@@ -16,11 +16,11 @@ export default async function ExamsPage() {
       <div className="grid gap-4 md:grid-cols-2">
         {exams.map(ex => (
           <div key={ex.id} className="card">
-            <div className="text-xs text-slate-400">{ex.code} • {ex.exam_date} • {ex.start_time}-{ex.end_time}</div>
+            <div className="text-xs text-slate-500">{ex.code} • {ex.exam_date} • {ex.start_time}-{ex.end_time}</div>
             <h2 className="mt-1 text-lg font-bold">{ex.title}</h2>
-            <p className="mt-1 line-clamp-2 text-sm text-slate-400">{ex.description}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-slate-500">{ex.description}</p>
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-slate-400">Deadline: {ex.registration_deadline}</span>
+              <span className="text-xs text-slate-500">Deadline: {ex.registration_deadline}</span>
             </div>
             <Link href={`/exams/${ex.id}`} className="btn mt-3 inline-block">View + Register</Link>
           </div>

@@ -44,9 +44,9 @@ export default function ExamDetail() {
   return (
     <main className="mt-8 space-y-4">
       <div className="card">
-        <div className="text-xs text-slate-400">{exam.code}</div>
+        <div className="text-xs text-slate-500">{exam.code}</div>
         <h1 className="text-2xl font-black">{exam.title}</h1>
-        <p className="mt-2 text-slate-300">{exam.description}</p>
+        <p className="mt-2 text-slate-600">{exam.description}</p>
         <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
           <div>Date: <b>{exam.exam_date}</b></div>
           <div>Time: <b>{exam.start_time} – {exam.end_time}</b></div>

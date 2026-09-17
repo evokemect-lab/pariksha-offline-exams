@@ -32,15 +32,15 @@ export default function Dashboard() {
   return (
     <main className="mt-8 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black">My exams {email && <span className="text-sm font-normal text-slate-400">({email})</span>}</h1>
+        <h1 className="text-2xl font-black">My exams {email && <span className="text-sm font-normal text-slate-500">({email})</span>}</h1>
         <button onClick={logout} className="btn-ghost text-sm">Logout</button>
       </div>
       {!regs.length && <div className="card">No registrations yet. <Link href="/exams" className="text-brand">Browse exams</Link></div>}
       {regs.map(r => (
         <div key={r.id} className="card">
-          <div className="text-xs text-slate-400">{r.hall_ticket_no} • {r.payment_status} • {r.status}</div>
+          <div className="text-xs text-slate-500">{r.hall_ticket_no} • {r.payment_status} • {r.status}</div>
           <h2 className="font-bold">{(r as any).exams?.title}</h2>
-          <div className="text-sm text-slate-400">
+          <div className="text-sm text-slate-500">
             {(r as any).exams?.exam_date} • {(r as any).exam_centers?.name}, {(r as any).exam_centers?.city}
             {r.room_no && <> • Room {r.room_no} Seat {r.seat_no}</>}
           </div>

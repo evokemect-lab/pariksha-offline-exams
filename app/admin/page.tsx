@@ -17,6 +17,18 @@ export default function Admin() {
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
   const [examDate, setExamDate] = useState("");
+  async function createCenter() {
+    if (!cName.trim() || !cCity.trim()) { setMsg("Center name + city are required."); return; }
+    const rooms = Math.max(1, parseInt(cRooms) || 1);
+    const per = Math.max(1, parseInt(cPer) || 30);
+    const cap = parseInt(cCap) > 0 ? parseInt(cCap) : rooms * per;
+    await act("create-center", {
+      name: cName.trim(), center_code: cCode.trim(), address: cAddr.trim(), city: cCity.trim(),
+      capacity: cap, contact_phone: cPhone.trim(), num_classes: rooms, seats_per_class: per
+    });
+    setCName(""); setCCode(""); setCAddr(""); setCCity(""); setCPhone("");
+    setCCap("100"); setCRooms("4"); setCPer("30");
+  }
   // center form
   const [cName, setCName] = useState("");
   const [cCode, setCCode] = useState("");
@@ -324,7 +336,8 @@ export default function Admin() {
                   <input className="input" placeholder="No. of classes" title="How many classrooms in this center" value={cRooms} onChange={e=>setCRooms(e.target.value)} />
                   <input className="input" placeholder="Seats per class" title="Students per classroom" value={cPer} onChange={e=>setCPer(e.target.value)} />
                 </div>
-                <button onClick={() => { act("create-center", { name: cName, center_code: cCode, address: cAddr, city: cCity, capacity: Number(cCap), contact_phone: cPhone, num_classes: Number(cRooms), seats_per_class: Number(cPer) }); setCName(""); setCCode(""); setCAddr(""); setCCity(""); setCPhone(""); }} className="btn" disabled={busy || !cName || !cCity}>Add center</button>
+                <button onClick={createCenter} className="btn" disabled={busy || !cName.trim() || !cCity.trim()}>Add center</button>
+                <p className="text-xs text-slate-500">Booking capacity = {(parseInt(cCap) > 0 ? parseInt(cCap) : (Math.max(1, parseInt(cRooms) || 1) * Math.max(1, parseInt(cPer) || 30)))} seats{(parseInt(cCap) > 0 ? "" : " (auto: classes × per class)")}. Capacity falls as students register.</p>
               </div>
               <div className="card space-y-2">
                 <h2 className="font-bold">Centers ({(data.centers || []).length})</h2>

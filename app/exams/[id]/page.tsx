@@ -2,13 +2,19 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useParams, useRouter } from "next/navigation";
-import { type Exam, type ExamCenter } from "@/lib/types";
+import { type Exam } from "@/lib/types";
+
+interface CenterAvail {
+  id: string; name: string; address: string; city: string; capacity: number;
+  contact_phone: string | null; center_code: string | null;
+  taken: number; left: number; full: boolean;
+}
 
 export default function ExamDetail() {
   const params = useParams() as { id: string };
   const router = useRouter();
   const [exam, setExam] = useState<Exam | null>(null);
-  const [centers, setCenters] = useState<ExamCenter[]>([]);
+  const [centers, setCenters] = useState<CenterAvail[]>([]);
   const [centerId, setCenterId] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,10 +27,13 @@ export default function ExamDetail() {
       if (error || !data) setNotFound(true);
       else setExam(data as Exam);
     });
-    sb.from("exam_centers").select("*").eq("is_active", true).then(({ data }) => {
-      setCenters((data || []) as ExamCenter[]);
-      if (data?.[0]) setCenterId(data[0].id);
-    });
+    // Live availability (sorted: most seats first). Refresh after each registration.
+    fetch(`/api/exam-centers?exam_id=${params.id}`).then(r => r.json()).then(j => {
+      const list = (j.centers || []) as CenterAvail[];
+      setCenters(list);
+      const firstOpen = list.find(c => !c.full);
+      if (firstOpen) setCenterId(firstOpen.id);
+    }).catch(() => {});
     sb.auth.getSession().then(({ data: { session } }) => setLoggedIn(!!session));
     const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setLoggedIn(!!session));
     return () => { sub.subscription.unsubscribe(); };
@@ -43,12 +52,22 @@ export default function ExamDetail() {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "Registration failed");
       setMsg(`Registered! Hall ticket: ${j.hall_ticket_no}`);
+      // Refresh seats-left so capacity visibly reduces after each registration
+      fetch(`/api/exam-centers?exam_id=${params.id}`).then(r => r.json()).then(j2 => {
+        const list = (j2.centers || []) as CenterAvail[];
+        setCenters(list);
+        if (list.find(c => c.id === centerId)?.full) {
+          const next = list.find(c => !c.full);
+          setCenterId(next ? next.id : "");
+        }
+      }).catch(() => {});
     } catch (e: any) { setMsg(e.message); }
     setLoading(false);
   }
 
-  if (notFound) return (
-    <main className="mt-8 card mx-auto max-w-md text-center">
+  const allFull = centers.length > 0 && centers.every(c => c.full);
+
+  if (notFound) return (    <main className="mt-8 card mx-auto max-w-md text-center">
       <h1 className="text-xl font-black">Exam no longer available</h1>
       <p className="mt-2 text-sm text-slate-500">This exam was removed or is no longer published. Please pick another from the list.</p>
       <button onClick={() => router.push("/exams")} className="btn mt-4">Back to exams</button>
@@ -86,12 +105,18 @@ export default function ExamDetail() {
       <div className="card space-y-3">
         <h2 className="font-bold">Register for this exam</h2>
         <div>
-          <label className="label">Exam center</label>
+          <label className="label">Exam center — seats reduce as students register</label>
           <select className="input" value={centerId} onChange={e=>setCenterId(e.target.value)}>
-            {centers.map(c => <option key={c.id} value={c.id}>{c.name} — {c.city} (cap {c.capacity})</option>)}
+            {centers.map((c, i) => (
+              <option key={c.id} value={c.id} disabled={c.full}>
+                {c.name} — {c.city} ({c.full ? "FULL" : `${c.left} of ${c.capacity} seats left`}){i === 0 && !c.full ? " ⭐ Recommended" : ""}
+              </option>
+            ))}
           </select>
+          {!centers.length && <p className="mt-1 text-xs text-slate-500">Loading centers…</p>}
         </div>
-        <button className="btn" disabled={loading || !centerId} onClick={register}>{loading ? "Registering…" : "Register"}</button>
+        <button className="btn" disabled={loading || !centerId || allFull} onClick={register}>{loading ? "Registering…" : "Register"}</button>
+        {allFull && <div className="text-sm font-bold text-red-600">All centers are full for this exam.</div>}
         {msg && <div className="text-sm">{msg}</div>}
       </div>
       )}

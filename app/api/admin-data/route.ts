@@ -64,14 +64,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, message: `Issued ${count ?? "all"} pending hall tickets ✓` });
   }
   if (action === "create-center") {
-    const { name, center_code, address, city, capacity, contact_phone } = body;
+    const { name, center_code, address, city, capacity, contact_phone, num_classes, seats_per_class } = body;
     if (!name || !city) return NextResponse.json({ error: "Name + city required" }, { status: 400 });
+    const rooms = Math.max(1, Number(num_classes) || 1);
+    const per = Math.max(1, Number(seats_per_class) || 30);
+    const cap = Number(capacity) > 0 ? Number(capacity) : rooms * per;
     const { data, error } = await db.from("exam_centers").insert({
       name, center_code: center_code || null, address: address || "", city,
-      capacity: capacity || 100, contact_phone: contact_phone || null, is_active: true
+      capacity: cap, contact_phone: contact_phone || null, is_active: true,
+      num_classes: rooms, seats_per_class: per
     }).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true, message: "Center added ✓", center: data });
+    return NextResponse.json({ ok: true, message: `Center added ✓ (${rooms} classes × ${per} = ${cap} seats)`, center: data });
   }
   if (action === "toggle-center") {
     const { error } = await db.from("exam_centers").update({ is_active: body.is_active }).eq("id", body.id);
@@ -80,12 +84,22 @@ export async function POST(req: Request) {
   }
   if (action === "update-center") {
     const { id, name, center_code, address, city, capacity, contact_phone, num_classes, seats_per_class } = body;
+    // Keep booking capacity in sync when classrooms change without explicit capacity
+    let capUpdate: Record<string, number> = {};
+    if (capacity !== undefined && Number(capacity) > 0) {
+      capUpdate = { capacity: Number(capacity) };
+    } else if (num_classes !== undefined || seats_per_class !== undefined) {
+      const { data: cur } = await db.from("exam_centers").select("capacity,num_classes,seats_per_class").eq("id", id).single();
+      const rooms = num_classes !== undefined ? Math.max(1, Number(num_classes) || 1) : (cur?.num_classes || 1);
+      const per = seats_per_class !== undefined ? Math.max(1, Number(seats_per_class) || 30) : (cur?.seats_per_class || 30);
+      capUpdate = { capacity: rooms * per };
+    }
     const { error } = await db.from("exam_centers").update({
       ...(name !== undefined ? { name } : {}),
       ...(center_code !== undefined ? { center_code: center_code || null } : {}),
       ...(address !== undefined ? { address } : {}),
       ...(city !== undefined ? { city } : {}),
-      ...(capacity !== undefined ? { capacity: Number(capacity) } : {}),
+      ...(capacity !== undefined || Object.keys(capUpdate).length ? capUpdate : {}),
       ...(contact_phone !== undefined ? { contact_phone: contact_phone || null } : {}),
       ...(num_classes !== undefined ? { num_classes: Number(num_classes) } : {}),
       ...(seats_per_class !== undefined ? { seats_per_class: Number(seats_per_class) } : {})

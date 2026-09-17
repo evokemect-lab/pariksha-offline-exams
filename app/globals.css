@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { background: #05080c; color: #f7f8fa; }
+.card { @apply rounded-2xl border border-white/10 bg-card p-5; }
+.btn { @apply rounded-xl bg-brand px-4 py-2 font-bold text-black disabled:opacity-50; }
+.btn-ghost { @apply rounded-xl border border-white/15 px-4 py-2 hover:bg-white/10; }
+.input { @apply w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 outline-none focus:border-brand; }
+.label { @apply mb-1 block text-xs font-bold uppercase tracking-wide text-slate-400; }
+
+@media print {
+  .no-print { display: none !important; }
+  header { display: none !important; position: static !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .ticket-print { margin: 0 !important; border-radius: 0 !important; box-shadow: none !important; border: 2px solid #000 !important; }
+  @page { margin: 12mm; }
+}

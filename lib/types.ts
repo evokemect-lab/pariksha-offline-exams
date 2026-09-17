@@ -16,6 +16,25 @@ export interface Exam {
   total_marks: number;
   syllabus_url: string | null;
   status: ExamStatus;
+  question_paper_url?: string | null;
+  reporting_time?: string | null;
+  gate_closing_time?: string | null;
+  medium?: string | null;
+}
+
+export interface Profile {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  role: Role;
+  father_name?: string | null;
+  mother_name?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+  category?: string | null;
+  address?: string | null;
+  photo_url?: string | null;
+  id_proof_no?: string | null;
 }
 
 export interface ExamCenter {
@@ -26,6 +45,7 @@ export interface ExamCenter {
   capacity: number;
   contact_phone: string | null;
   is_active: boolean;
+  center_code?: string | null;
 }
 
 export interface Registration {

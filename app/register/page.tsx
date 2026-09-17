@@ -9,6 +9,10 @@ export default function Register() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [father, setFather] = useState("");
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState("");
+  const [category, setCategory] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -30,7 +34,11 @@ export default function Register() {
         return;
       }
       const uid = data.user?.id || session.user.id;
-      const { error: perr } = await sb.from("profiles").upsert({ id: uid, full_name: fullName, phone, role: "student" });
+      const { error: perr } = await sb.from("profiles").upsert({
+        id: uid, full_name: fullName, phone, role: "student",
+        father_name: father || null, dob: dob || null,
+        gender: gender || null, category: category || null
+      });
       if (perr) setErr("Account created but profile save failed: " + perr.message + " — you can still login.");
       else router.push("/dashboard");
     } catch (err: any) {
@@ -46,6 +54,22 @@ export default function Register() {
       <form onSubmit={onSubmit} className="mt-4 space-y-3">
         <div><label className="label">Full name</label><input className="input" value={fullName} onChange={e=>setFullName(e.target.value)} required /></div>
         <div><label className="label">Phone</label><input className="input" value={phone} onChange={e=>setPhone(e.target.value)} required /></div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><label className="label">Father's name</label><input className="input" value={father} onChange={e=>setFather(e.target.value)} /></div>
+          <div><label className="label">Date of birth</label><input className="input" type="date" value={dob} onChange={e=>setDob(e.target.value)} /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div><label className="label">Gender</label>
+            <select className="input" value={gender} onChange={e=>setGender(e.target.value)}>
+              <option value="">Select</option><option>Male</option><option>Female</option><option>Other</option>
+            </select>
+          </div>
+          <div><label className="label">Category</label>
+            <select className="input" value={category} onChange={e=>setCategory(e.target.value)}>
+              <option value="">Select</option><option>General</option><option>EWS</option><option>OBC-NCL</option><option>SC</option><option>ST</option>
+            </select>
+          </div>
+        </div>
         <div><label className="label">Email</label><input className="input" value={email} onChange={e=>setEmail(e.target.value)} required /></div>
         <div><label className="label">Password</label><input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></div>
         {err && <div className="text-sm text-red-400">{err}</div>}

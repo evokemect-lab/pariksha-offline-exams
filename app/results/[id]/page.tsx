@@ -28,6 +28,9 @@ export default function ResultView() {
           <div className="text-4xl font-black text-brand">{row.marks_obtained}/{row.registrations?.exams?.total_marks}</div>
           <div>Grade: <b>{row.grade || "—"}</b> Rank: <b>{row.rank || "—"}</b></div>
           <div className="text-sm text-slate-500">{row.remarks}</div>
+          {row.registrations?.exams?.question_paper_url && (
+            <div><a href={row.registrations.exams.question_paper_url} target="_blank" className="btn-ghost mt-2 inline-block text-sm">📄 Question paper</a></div>
+          )}
         </div>
       )}
     </main>

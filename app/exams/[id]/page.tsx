@@ -52,6 +52,7 @@ export default function ExamDetail() {
           <div>Time: <b>{exam.start_time} – {exam.end_time}</b></div>
           <div>Deadline: <b>{exam.registration_deadline}</b></div>
           <div>Total marks: <b>{exam.total_marks}</b></div>
+          {exam.question_paper_url && <div><a href={exam.question_paper_url} target="_blank" className="font-bold text-brand">📄 Download question paper</a></div>}
         </div>
       </div>
 
